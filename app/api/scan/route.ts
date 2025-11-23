@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/mongodb'; // ⬅️ qui ora usiamo l'export giusto
+import { connectToDatabase } from '@/lib/mongodb';
+import { ObjectId } from 'mongodb';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,18 +14,39 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Se il QR contiene una URL tipo https://.../ticket?c=EN-XXXX
+    // normalizza un po' il testo
+    code = code.trim();
+
+    // 1) Se il QR è una URL tipo ...?c=EN-XXXXXX
     const urlMatch = code.match(/[?&]c=([^&]+)/);
     if (urlMatch) {
-      code = decodeURIComponent(urlMatch[1]);
+      code = decodeURIComponent(urlMatch[1]).trim();
     }
 
-    // ⬇️ ci connettiamo al DB con la tua funzione esistente
     const { db } = await connectToDatabase();
     const requests = db.collection('requests');
 
-    const request = await requests.findOne({ code });
+    let request: any = null;
 
+    // 2) Prova prima a cercare per campo "code"
+    request = await requests.findOne({ code });
+
+    // 3) Se non trovato, prova a capire se dentro c'è "ID:xxxxxxxxxxxxxxxxxxxxxxxx"
+    if (!request) {
+      const idMatch = code.match(/ID:([0-9a-fA-F]{24})/);
+      if (idMatch) {
+        const objectId = new ObjectId(idMatch[1].toLowerCase());
+        request = await requests.findOne({ _id: objectId });
+      }
+    }
+
+    // 4) Se ancora niente, prova se il codice È direttamente un ObjectId
+    if (!request && /^[0-9a-fA-F]{24}$/.test(code)) {
+      const objectId = new ObjectId(code.toLowerCase());
+      request = await requests.findOne({ _id: objectId });
+    }
+
+    // 5) Nessuna richiesta trovata
     if (!request) {
       return NextResponse.json(
         {
@@ -35,6 +57,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 6) Controllo stato
     if (request.status !== 'approved') {
       return NextResponse.json(
         {
@@ -45,6 +68,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 7) QR già usato
     if (request.usedAt) {
       return NextResponse.json({
         status: 'already_used',
@@ -55,6 +79,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // 8) Segna ingresso
     const now = new Date();
 
     await requests.updateOne(
