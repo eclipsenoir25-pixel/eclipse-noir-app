@@ -39,12 +39,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Richiesta non trovata" }, { status: 404 });
     }
 
-    // ✔️ Genera codice univoco
-    const qrCodeText = `EN-${id}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    // -----------------------------------------------------
+    // 🔥 1) QR CODE TEXT = SOLO L’ID DEL DOCUMENTO
+    // -----------------------------------------------------
+    const qrCodeText = id;   // <-- ECCO LA MODIFICA PIÙ IMPORTANTE
 
-    // ------------------------
-    // 🔥 GENERA QR SU CLOUDINARY
-    // ------------------------
+    // -----------------------------------------------------
+    // 🔥 2) Generate QR via Cloudinary
+    // -----------------------------------------------------
     const qrImage = cloudinary.url("qr_placeholder.png", {
       transformation: [
         {
@@ -55,22 +57,24 @@ export async function POST(req: Request) {
       ],
     });
 
-    // ✔️ Salva nel database
+    // -----------------------------------------------------
+    // 🔥 3) Save to database
+    // -----------------------------------------------------
     await db.collection("requests").updateOne(
       { _id: new ObjectId(id) },
       {
         $set: {
           status: "approved",
-          code: qrCodeText,
+          code: qrCodeText,  // <-- ora salva SOLO l’ID
           qrUrl: qrImage,
           approvedAt: new Date(),
         },
       }
     );
 
-    // ------------------------
-    // INVIO WHATSAPP ALL’OSPITE
-    // ------------------------
+    // -----------------------------------------------------
+    // 🔥 4) Send WhatsApp to guest
+    // -----------------------------------------------------
     await client.messages.create({
       from: `whatsapp:${fromNumber}`,
       to: normalizeWhatsApp(request.phone),
@@ -79,10 +83,11 @@ export async function POST(req: Request) {
         `Mostra questo QR all’ingresso.\n` +
         `È valido *una sola volta*.\n\n` +
         `ID: ${id}`,
-      mediaUrl: [qrImage], // 👈 eccolo qui
+      mediaUrl: [qrImage],
     });
 
     return NextResponse.json({ ok: true });
+
   } catch (error) {
     console.error("Errore approvazione:", error);
     return NextResponse.json({ error: "Errore interno" }, { status: 500 });
