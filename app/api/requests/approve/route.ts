@@ -2,16 +2,8 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
 import twilio from "twilio";
-import { v2 as cloudinary } from "cloudinary";
 
-// ------------------------
-// CLOUDINARY CONFIG
-// ------------------------
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
-  api_key: process.env.CLOUDINARY_API_KEY!,
-  api_secret: process.env.CLOUDINARY_API_SECRET!,
-});
+// 👉 Cloudinary qui non ci serve più per il QR, ma puoi anche lasciarlo importato se lo usi altrove
 
 // ------------------------
 // TWILIO ENV
@@ -42,20 +34,14 @@ export async function POST(req: Request) {
     // -----------------------------------------------------
     // 🔥 1) QR CODE TEXT = SOLO L’ID DEL DOCUMENTO
     // -----------------------------------------------------
-    const qrCodeText = id;   // <-- ECCO LA MODIFICA PIÙ IMPORTANTE
+    const qrCodeText = id;   // <-- SOLO ID
 
     // -----------------------------------------------------
-    // 🔥 2) Generate QR via Cloudinary
+    // 🔥 2) Generate QR via api.qrserver.com
     // -----------------------------------------------------
-    const qrImage = cloudinary.url("qr_placeholder.png", {
-      transformation: [
-        {
-          effect: `qr_code:${qrCodeText}`,
-          color: "#000000",
-        },
-        { width: 800, height: 800, crop: "scale" },
-      ],
-    });
+    const qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=600x600&data=${encodeURIComponent(
+      qrCodeText
+    )}`;
 
     // -----------------------------------------------------
     // 🔥 3) Save to database
@@ -65,7 +51,7 @@ export async function POST(req: Request) {
       {
         $set: {
           status: "approved",
-          code: qrCodeText,  // <-- ora salva SOLO l’ID
+          code: qrCodeText,  // <-- salva SOLO l’ID
           qrUrl: qrImage,
           approvedAt: new Date(),
         },
