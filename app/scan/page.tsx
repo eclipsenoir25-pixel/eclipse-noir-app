@@ -15,6 +15,7 @@ export default function ScanPage() {
   const [lastGuest, setLastGuest] = useState<string | null>(null);
   const [lastEvent, setLastEvent] = useState<string | null>(null);
   const [codeInput, setCodeInput] = useState<string>('');
+  const [lastScannedCode, setLastScannedCode] = useState<string>(''); // 👈 DEBUG: ultimo QR letto
 
   const handlePinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +36,7 @@ export default function ScanPage() {
     setMessage('Verifica in corso...');
     setLastGuest(null);
     setLastEvent(null);
+    setLastScannedCode(cleanedCode); // 👈 mostriamo cosa stiamo davvero mandando alla API
 
     try {
       const res = await fetch('/api/scan', {
@@ -81,10 +83,15 @@ export default function ScanPage() {
   const handleScanFromCamera = async (codes: any[]) => {
     if (!codes || codes.length === 0) return;
 
-    const raw = codes[0]?.rawValue || codes[0]?.value || '';
+    // la libreria passa un array di codici, prendiamo il primo
+    const raw =
+      codes[0]?.rawValue ||
+      codes[0]?.value ||
+      (typeof codes[0] === 'string' ? codes[0] : '');
+
     if (!raw) return;
 
-    // evitiamo di ripetere la stessa verifica mille volte
+    // evitiamo di spammare richieste mentre è in loading
     if (status === 'loading') return;
 
     await verifyCode(raw);
@@ -92,9 +99,6 @@ export default function ScanPage() {
 
   const handleCameraError = (error: any) => {
     console.error('Errore lettore QR:', error);
-    // Non blocchiamo tutto, ma potresti mostrare un messaggio
-    // setStatus('error');
-    // setMessage('Errore nell\'uso della fotocamera.');
   };
 
   if (!authenticated) {
@@ -231,6 +235,17 @@ export default function ScanPage() {
                 Evento
               </p>
               <p className="text-sm text-neutral-200">{lastEvent}</p>
+            </div>
+          )}
+
+          {lastScannedCode && (
+            <div className="mt-2">
+              <p className="text-xs text-neutral-500 uppercase tracking-[0.2em]">
+                Ultimo valore QR letto
+              </p>
+              <p className="text-[11px] text-neutral-400 break-all">
+                {lastScannedCode}
+              </p>
             </div>
           )}
 
