@@ -9,7 +9,7 @@ const adminNumber = process.env.ECLIPSE_ADMIN_WHATSAPP_TO!;
 
 const client = twilio(accountSid, authToken);
 
-// Normalizza numero ospite/admin (aggiunge +39 e whatsapp:)
+// Normalizza numero ospite/admin
 function normalizeWhatsApp(number: string) {
   let n = number.trim();
   if (!n.startsWith("+")) n = "+39" + n;
@@ -28,9 +28,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1️⃣ Salvataggio su MongoDB (PRIMA DI TUTTO, è la cosa più importante)
+    // 1️⃣ Salvataggio su MongoDB
     const { db } = await connectToDatabase();
-
     const result = await db.collection("requests").insertOne({
       guestName,
       phone,
@@ -43,10 +42,10 @@ export async function POST(req: Request) {
 
     const insertedId = result.insertedId.toString();
 
-    // 2️⃣ Invio WhatsApp ALL’ADMIN (ma NON blocca il salvataggio se fallisce)
+    // 2️⃣ WhatsApp Admin (non blocca tutto se fallisce)
     try {
       await client.messages.create({
-        from: fromNumber, // es: "whatsapp:+14155238886"
+        from: fromNumber,
         to: normalizeWhatsApp(adminNumber),
         body:
           `📩 *Nuova richiesta lista Eclipse Noir*\n\n` +
@@ -60,11 +59,10 @@ export async function POST(req: Request) {
           `RIFIUTA ${insertedId}`,
       });
     } catch (err) {
-      console.error("❌ Errore WhatsApp ADMIN:", err);
-      // NON facciamo throw: il DB è già ok, il resto è solo notifica
+      console.error("❌ Errore WhatsApp admin:", err);
     }
 
-    // 3️⃣ Invio WhatsApp ALL’OSPITE (anche questo non deve bloccare il DB)
+    // 3️⃣ WhatsApp Ospite (non blocca se fallisce)
     try {
       await client.messages.create({
         from: fromNumber,
@@ -75,17 +73,15 @@ export async function POST(req: Request) {
           `Attendi la conferma dalla direzione.`,
       });
     } catch (err) {
-      console.error("❌ Errore WhatsApp OSPITE:", err);
-      // Anche qui: logghiamo e basta
+      console.error("❌ Errore WhatsApp ospite:", err);
     }
 
-    // 4️⃣ Risposta OK: a questo punto la richiesta ESISTE garantito
     return NextResponse.json(
       { ok: true, message: "Richiesta registrata", id: insertedId },
       { status: 200 }
     );
   } catch (err) {
-    console.error("❌ Errore create request (bloccante):", err);
+    console.error("❌ Errore create request:", err);
     return NextResponse.json(
       { ok: false, message: "Server error" },
       { status: 500 }
