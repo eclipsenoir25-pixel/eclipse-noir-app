@@ -29,18 +29,28 @@ export default function RootLayout({
       <body
         className={`${poppins.variable} ${cinzel.variable} bg-black text-neutral-100 antialiased`}
       >
-        <div className="relative min-h-screen overflow-hidden bg-black">
+        <div className="min-h-screen bg-black">
+          {/* HEADER CON LOGO - DEBUG VISIBILE */}
+          <header className="w-full border-b border-neutral-800 bg-black/90 px-4 py-3 flex items-center gap-3">
+            <img
+              src="/logo/logo-eclipse.png"
+              alt="Eclipse Noir"
+              className="h-16 w-auto border-2 border-red-500 bg-white"
+            />
+            <div className="flex flex-col">
+              <span className="text-xs tracking-[0.3em] uppercase text-neutral-400">
+                Eclipse Noir
+              </span>
+              <span className="text-[11px] text-neutral-500">
+                Sistema ingressi · lista ospiti · QR access
+              </span>
+            </div>
+          </header>
 
-          {/* LOGO DI DEBUG */}
-          <img
-            src="/logo/logo-eclipse.png"
-            alt="Eclipse Noir"
-            className="pointer-events-none select-none fixed top-4 left-4 h-[160px] w-auto z-0 border-2 border-red-500 bg-white"
-          />
-
-          {/* Contenuto dell'app */}
-          <div className="relative z-10">{children}</div>
-
+          {/* CONTENUTO PAGINE */}
+          <main className="relative">
+            {children}
+          </main>
         </div>
       </body>
     </html>
