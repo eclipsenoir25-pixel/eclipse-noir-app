@@ -36,7 +36,10 @@ body {
   color: var(--color-text) !important;
   font-family: var(--font-poppins), system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif !important;
+
+  border: 5px solid red !important;
 }
+
 
 /* =================================================================== */
 /* ========== ECLIPSE NOIR UI – CLASSI GLOBALI ======================= */
@@ -111,4 +114,24 @@ body {
   .print\:hidden {
     display: none !important;
   }
+}
+/* ================== WATERMARK ECLIPSE NOIR ================== */
+
+.eclipse-watermark {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url("/logo/logo-eclipse.png");
+  background-repeat: no-repeat;
+  background-size: 50vh auto;       /* ~50% dell’altezza viewport */
+  background-position: 5% center;   /* leggermente a sinistra */
+  opacity: 0.07;                    /* molto soft */
+  filter: drop-shadow(0 0 35px rgba(212, 175, 55, 0.6));
+}
+
+/* Garantiamo che il contenuto sia sopra la watermark */
+.eclipse-root {
+  position: relative;
+  z-index: 1;
 }
