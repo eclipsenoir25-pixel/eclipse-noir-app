@@ -29,11 +29,18 @@ export default function RootLayout({
       <body
         className={`${poppins.variable} ${cinzel.variable} bg-black text-neutral-100 antialiased`}
       >
-        {/* Watermark globale Eclipse Noir (logo grande sullo sfondo) */}
-        <div className="eclipse-watermark" />
+        {/* Contenitore principale */}
+        <div className="relative min-h-screen overflow-hidden bg-black">
+          {/* LOGO sullo sfondo, fisso, leggermente spostato a sinistra */}
+          <img
+            src="/logo/logo-eclipse.png"
+            alt="Eclipse Noir"
+            className="pointer-events-none select-none fixed inset-y-0 left-0 m-auto h-[50vh] opacity-[0.08] -z-10"
+          />
 
-        {/* Tutto il resto dell'app sopra alla watermark */}
-        <div className="eclipse-root">{children}</div>
+          {/* Tutto il contenuto dell'app sopra il logo */}
+          <div className="relative z-10">{children}</div>
+        </div>
       </body>
     </html>
   );
