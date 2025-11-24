@@ -2,299 +2,337 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type ClientRow = {
-  id: string;
+type ClientItem = {
+  _id: string;
   guestName: string;
   phone: string;
   eventId: string;
-  arrivalTime: string;
-  status: string;
-  createdAt: string | null;
+  status?: string; // es: "approved", "checked_in", ecc.
+  totalCompanions?: number;
+  checkedInAt?: string;
 };
 
-export default function ClientsPage() {
-  const [data, setData] = useState<ClientRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+type StatusFilter = "all" | "approved" | "checked_in" | "other";
+
+export default function AdminClientsPage() {
+  const [clients, setClients] = useState<ClientItem[]>([]);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [eventFilter, setEventFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [search, setSearch] = useState<string>("");
+
+  async function loadClients() {
+    try {
+      const res = await fetch("/api/admin/clients");
+      const data = await res.json();
+      setClients(data.clients || []);
+    } catch (err) {
+      console.error("Errore caricamento clients:", err);
+    }
+  }
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch("/api/admin/clients");
-        const json = await res.json();
-        if (json.ok) {
-          setData(json.data);
-        } else {
-          console.error("Errore caricamento clients:", json);
-        }
-      } catch (err) {
-        console.error("Errore fetch /api/admin/clients:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    load();
+    loadClients();
   }, []);
 
-  const uniqueEvents = useMemo(() => {
+  // eventi unici per filtro
+  const eventOptions = useMemo(() => {
     const set = new Set<string>();
-    data.forEach((d) => {
-      if (d.eventId) set.add(d.eventId);
+    clients.forEach((c) => {
+      if (c.eventId) set.add(c.eventId);
     });
     return Array.from(set);
-  }, [data]);
+  }, [clients]);
 
-  const filtered = useMemo(() => {
-    return data.filter((row) => {
-      const matchesSearch =
-        !search ||
-        row.guestName.toLowerCase().includes(search.toLowerCase()) ||
-        row.phone.includes(search);
-
-      const matchesEvent =
-        eventFilter === "all" || row.eventId === eventFilter;
+  // filtri + ricerca
+  const filteredClients = useMemo(() => {
+    return clients.filter((c) => {
+      const normalizedStatus = (c.status || "").toLowerCase();
 
       const matchesStatus =
-        statusFilter === "all" || row.status === statusFilter;
+        statusFilter === "all"
+          ? true
+          : statusFilter === "approved"
+          ? normalizedStatus === "approved"
+          : statusFilter === "checked_in"
+          ? normalizedStatus === "checked_in"
+          : normalizedStatus !== "approved" &&
+            normalizedStatus !== "checked_in";
 
-      return matchesSearch && matchesEvent && matchesStatus;
+      const matchesEvent =
+        eventFilter === "all" ? true : c.eventId === eventFilter;
+
+      const term = search.trim().toLowerCase();
+      const matchesSearch =
+        !term ||
+        c.guestName.toLowerCase().includes(term) ||
+        c.phone.toLowerCase().includes(term);
+
+      return matchesStatus && matchesEvent && matchesSearch;
     });
-  }, [data, search, eventFilter, statusFilter]);
+  }, [clients, statusFilter, eventFilter, search]);
 
+  // esportazione CSV (Excel)
+  const handleExportCSV = () => {
+    if (!filteredClients.length) return;
+
+    const headers = [
+      "Nome",
+      "Telefono",
+      "Evento",
+      "Stato",
+      "Accompagnatori",
+      "Check-in",
+    ];
+
+    const rows = filteredClients.map((c) => [
+      c.guestName || "",
+      c.phone || "",
+      c.eventId || "",
+      c.status || "",
+      c.totalCompanions?.toString() ?? "",
+      c.checkedInAt ?? "",
+    ]);
+
+    let csvContent = headers.join(";") + "\n";
+    rows.forEach((row) => {
+      csvContent += row.join(";") + "\n";
+    });
+
+    const blob = new Blob([csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "eclipse-noir-clienti.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // stampa / PDF (usa stampa browser -> Salva come PDF)
   const handlePrint = () => {
-    window.print();
-  };
-
-  const formatDate = (iso: string | null) => {
-    if (!iso) return "-";
-    const d = new Date(iso);
-    return d.toLocaleString("it-IT", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const statusLabel = (status: string) => {
-    switch (status) {
-      case "approved":
-        return "APPROVATO";
-      case "rejected":
-        return "RIFIUTATO";
-      default:
-        return "IN ATTESA";
-    }
-  };
-
-  const statusColorClass = (status: string) => {
-    switch (status) {
-      case "approved":
-        return "bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
-      case "rejected":
-        return "bg-red-500/20 text-red-300 border-red-500/40";
-      default:
-        return "bg-yellow-500/10 text-yellow-300 border-yellow-500/30";
+    if (typeof window !== "undefined") {
+      window.print();
     }
   };
 
   return (
-    <div className="min-h-screen bg-black text-neutral-100">
-      {/* HEADER */}
-      <header className="border-b border-neutral-800 px-6 py-4 flex items-center justify-between print:hidden">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-500 via-amber-500 to-yellow-300 flex items-center justify-center shadow-[0_0_25px_rgba(212,175,55,0.7)]">
-            <span className="text-xs font-semibold tracking-[0.25em] text-black">
-              EN
+    <div className="px-4 py-8 max-w-5xl mx-auto text-neutral-100">
+      {/* HEADER PAGINA */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-[#d4af37]">
+            Pannello Ospiti
+          </h1>
+          <p className="text-sm text-neutral-400 mt-1">
+            Lista ospiti approvati / in ingresso, con filtri e lista
+            stampabile.
+          </p>
+        </div>
+
+        {/* RIEPILOGO NUMERI */}
+        <div className="flex flex-wrap gap-3 text-xs sm:text-[11px]">
+          <span className="px-3 py-1.5 rounded-full border border-neutral-600 bg-black/40">
+            Totali:{" "}
+            <span className="font-semibold text-neutral-100">
+              {clients.length}
             </span>
+          </span>
+          <span className="px-3 py-1.5 rounded-full border border-emerald-600/70 bg-emerald-900/20 text-emerald-200">
+            Approved:{" "}
+            {
+              clients.filter(
+                (c) =>
+                  (c.status || "").toLowerCase() === "approved"
+              ).length
+            }
+          </span>
+          <span className="px-3 py-1.5 rounded-full border border-blue-600/70 bg-blue-900/25 text-blue-200">
+            Check-in:{" "}
+            {
+              clients.filter(
+                (c) =>
+                  (c.status || "").toLowerCase() === "checked_in"
+              ).length
+            }
+          </span>
+        </div>
+      </div>
+
+      {/* FILTRI + RICERCA + EXPORT */}
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        {/* Filtri */}
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center flex-wrap">
+          {/* Filtro stato */}
+          <div className="flex flex-col gap-1">
+            <span className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+              Stato
+            </span>
+            <select
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as StatusFilter)
+              }
+              className="bg-black/70 border border-neutral-700 rounded-full px-3 py-1.5 text-xs outline-none focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]"
+            >
+              <option value="all">Tutti</option>
+              <option value="approved">Approved</option>
+              <option value="checked_in">Check-in</option>
+              <option value="other">Altri</option>
+            </select>
           </div>
-          <div>
-            <h1 className="text-lg font-semibold tracking-[0.25em] uppercase text-amber-300">
-              Eclipse Noir
-            </h1>
-            <p className="text-xs text-neutral-400">
-              Dashboard ospiti · lista stampabile
-            </p>
+
+          {/* Filtro evento */}
+          <div className="flex flex-col gap-1">
+            <span className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+              Evento
+            </span>
+            <select
+              value={eventFilter}
+              onChange={(e) => setEventFilter(e.target.value)}
+              className="bg-black/70 border border-neutral-700 rounded-full px-3 py-1.5 text-xs outline-none focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]"
+            >
+              <option value="all">Tutti</option>
+              {eventOptions.map((ev) => (
+                <option key={ev} value={ev}>
+                  {ev}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
-        <nav className="flex items-center gap-3 text-xs">
-          <a
-            href="/admin/requests"
-            className="px-3 py-1 rounded-full border border-neutral-700 hover:border-amber-400 hover:text-amber-300 transition"
-          >
-            Richieste
-          </a>
-          <a
-            href="/admin/clients"
-            className="px-3 py-1 rounded-full border border-amber-500 text-amber-300 bg-amber-500/10"
-          >
-            Database ospiti
-          </a>
-        </nav>
-      </header>
-
-      {/* CONTENUTO */}
-      <main className="px-4 md:px-8 py-4 md:py-6">
-        {/* FILTRI */}
-        <section className="flex flex-col md:flex-row gap-4 md:items-end md:justify-between print:hidden">
-          <div className="flex-1 flex flex-col gap-3">
-            <h2 className="text-sm tracking-[0.3em] uppercase text-neutral-500">
-              Ospiti in lista
-            </h2>
-            <div className="flex flex-col md:flex-row gap-3">
-              <div className="flex-1">
-                <label className="text-xs text-neutral-400 block mb-1">
-                  Cerca per nome o telefono
-                </label>
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full rounded-lg bg-neutral-950 border border-neutral-700 px-3 py-2 text-sm outline-none focus:border-amber-400"
-                  placeholder="Es. Carmen, 347..."
-                />
-              </div>
-
-              <div className="w-full md:w-44">
-                <label className="text-xs text-neutral-400 block mb-1">
-                  Evento
-                </label>
-                <select
-                  value={eventFilter}
-                  onChange={(e) => setEventFilter(e.target.value)}
-                  className="w-full rounded-lg bg-neutral-950 border border-neutral-700 px-3 py-2 text-sm outline-none focus:border-amber-400"
-                >
-                  <option value="all">Tutti</option>
-                  {uniqueEvents.map((ev) => (
-                    <option key={ev} value={ev}>
-                      {ev}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="w-full md:w-44">
-                <label className="text-xs text-neutral-400 block mb-1">
-                  Stato
-                </label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="w-full rounded-lg bg-neutral-950 border border-neutral-700 px-3 py-2 text-sm outline-none focus:border-amber-400"
-                >
-                  <option value="all">Tutti</option>
-                  <option value="pending">In attesa</option>
-                  <option value="approved">Approvati</option>
-                  <option value="rejected">Rifiutati</option>
-                </select>
-              </div>
-            </div>
+        {/* Search + export */}
+        <div className="flex flex-col gap-3 w-full lg:w-auto">
+          <div className="flex flex-col gap-1">
+            <span className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+              Ricerca
+            </span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-black/70 border border-neutral-700 rounded-full px-3 py-2 text-xs outline-none focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]"
+              placeholder="Cerca per nome o telefono"
+            />
           </div>
 
-          <div className="flex flex-row md:flex-col gap-3 md:items-end">
-            <div className="text-xs text-neutral-400">
-              Totale:{" "}
-              <span className="text-amber-300 font-semibold">
-                {filtered.length}
-              </span>
-              {" / "}
-              <span className="text-neutral-500">{data.length}</span>
-            </div>
-
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleExportCSV}
+              className="
+                text-xs px-3 py-1.5 rounded-full
+                border border-[#d4af37]/80 text-[#d4af37]
+                hover:bg-[#d4af37]/10 transition
+              "
+            >
+              Scarica Excel (CSV)
+            </button>
             <button
               onClick={handlePrint}
-              className="inline-flex items-center justify-center px-4 py-2 rounded-full bg-amber-500 text-black text-xs font-semibold tracking-[0.25em] uppercase hover:bg-amber-400 transition shadow-[0_0_20px_rgba(212,175,55,0.5)]"
+              className="
+                text-xs px-3 py-1.5 rounded-full
+                bg-[#d4af37] text-black font-semibold
+                hover:bg-[#f3cd63] transition
+              "
             >
-              Stampa lista
+              Stampa / PDF
             </button>
           </div>
-        </section>
+        </div>
+      </div>
 
-        {/* TABELLA */}
-        <section className="mt-4 border border-neutral-800 rounded-2xl overflow-hidden bg-neutral-950/60">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-xs">
-              <thead className="bg-neutral-900/80 text-neutral-400 uppercase tracking-[0.2em]">
-                <tr>
-                  <th className="px-4 py-3 text-left">Ospite</th>
-                  <th className="px-4 py-3 text-left">Telefono</th>
-                  <th className="px-4 py-3 text-left">Evento</th>
-                  <th className="px-4 py-3 text-left">Arrivo</th>
-                  <th className="px-4 py-3 text-left">Stato</th>
-                  <th className="px-4 py-3 text-left">Richiesta</th>
-                  <th className="px-4 py-3 text-left print:hidden">ID</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-6 text-center text-neutral-500"
-                    >
-                      Caricamento ospiti...
-                    </td>
-                  </tr>
-                )}
+      {/* LISTA CLIENTI */}
+      {filteredClients.length === 0 ? (
+        <p className="text-neutral-400 text-sm">
+          Nessun ospite trovato con i filtri attuali.
+        </p>
+      ) : (
+        <div className="space-y-4 print:space-y-1">
+          {filteredClients.map((c) => {
+            const normalizedStatus = (c.status || "").toLowerCase();
 
-                {!loading && filtered.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-6 text-center text-neutral-500"
-                    >
-                      Nessun ospite trovato con questi filtri.
-                    </td>
-                  </tr>
-                )}
+            let statusLabel = c.status || "—";
+            let statusClass =
+              "border-neutral-500/60 text-neutral-300 bg-neutral-900/40";
 
-                {!loading &&
-                  filtered.map((row) => (
-                    <tr
-                      key={row.id}
-                      className="border-t border-neutral-900 hover:bg-neutral-900/60"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-[13px]">
-                          {row.guestName || "-"}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {row.phone || "-"}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {row.eventId || "-"}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {row.arrivalTime || "-"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={
-                            "inline-flex items-center px-2 py-1 rounded-full border text-[10px] uppercase tracking-[0.15em] " +
-                            statusColorClass(row.status)
-                          }
-                        >
-                          {statusLabel(row.status)}
+            if (normalizedStatus === "approved") {
+              statusLabel = "APPROVED";
+              statusClass =
+                "border-emerald-500/60 text-emerald-300 bg-emerald-900/20";
+            } else if (normalizedStatus === "checked_in") {
+              statusLabel = "CHECK-IN";
+              statusClass =
+                "border-blue-500/60 text-blue-200 bg-blue-900/25";
+            }
+
+            return (
+              <div
+                key={c._id}
+                className="
+                  rounded-xl border border-[#d4af37]/25 bg-black/60
+                  px-4 py-3 sm:px-5 sm:py-4
+                  shadow-[0_0_18px_rgba(0,0,0,0.7)]
+                  print:shadow-none print:border print:border-black
+                "
+              >
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                  {/* Info ospite */}
+                  <div className="space-y-1">
+                    <div className="text-xs text-neutral-500 uppercase tracking-[0.2em]">
+                      Ospite
+                    </div>
+                    <div className="text-lg font-semibold">
+                      {c.guestName}
+                    </div>
+                    <div className="text-sm text-neutral-300">
+                      <span className="text-neutral-500">Telefono: </span>
+                      {c.phone}
+                    </div>
+                    <div className="text-sm text-neutral-300">
+                      <span className="text-neutral-500">Evento: </span>
+                      {c.eventId}
+                    </div>
+                    {typeof c.totalCompanions === "number" && (
+                      <div className="text-sm text-neutral-300">
+                        <span className="text-neutral-500">
+                          Accompagnatori:{" "}
                         </span>
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {formatDate(row.createdAt)}
-                      </td>
-                      <td className="px-4 py-3 text-[10px] text-neutral-500 print:hidden">
-                        {row.id}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </main>
+                        {c.totalCompanions}
+                      </div>
+                    )}
+                    {c.checkedInAt && (
+                      <div className="text-[11px] text-neutral-500">
+                        Check-in: {c.checkedInAt}
+                      </div>
+                    )}
+                    <div className="text-[11px] text-neutral-500">
+                      ID: {c._id}
+                    </div>
+                  </div>
+
+                  {/* Stato */}
+                  <div className="flex flex-col items-start sm:items-end gap-2 min-w-[160px]">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
+                        Stato
+                      </span>
+                      <span
+                        className={`
+                          text-[11px] px-2 py-1 rounded-full border
+                          ${statusClass}
+                        `}
+                      >
+                        {statusLabel}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
