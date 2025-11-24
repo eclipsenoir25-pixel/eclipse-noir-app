@@ -30,14 +30,14 @@ export default function RootLayout({
         className={`${poppins.variable} ${cinzel.variable} bg-black text-neutral-100 antialiased`}
       >
         <div className="relative min-h-screen overflow-hidden bg-black">
-
-          {/* LOGO sullo sfondo */}
+          {/* LOGO MOLTO VISIBILE per test */}
           <img
             src="/logo/logo-eclipse.png"
-            alt="Eclipse Noir watermark"
-            className="pointer-events-none select-none fixed inset-y-0 left-0 m-auto h-[50vh] opacity-[0.08] -z-10"
+            alt="Eclipse Noir"
+            className="pointer-events-none select-none fixed inset-0 m-auto max-h-[70vh] opacity-30 z-0 border-2 border-red-500"
           />
 
+          {/* Contenuto dell'app sopra al logo */}
           <div className="relative z-10">{children}</div>
         </div>
       </body>
