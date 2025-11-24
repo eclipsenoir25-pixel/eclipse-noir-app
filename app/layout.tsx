@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Cinzel, Poppins } from "next/font/google";
+import Image from "next/image";
 import "./globals.css";
+import Header from "./components/Header";
 
 const cinzel = Cinzel({
   subsets: ["latin"],
@@ -27,31 +29,37 @@ export default function RootLayout({
   return (
     <html lang="it">
       <body
-        className={`${poppins.variable} ${cinzel.variable} bg-black text-neutral-100 antialiased`}
+        className={`${poppins.variable} ${cinzel.variable} bg-black text-neutral-100 antialiased min-h-screen flex flex-col relative overflow-x-hidden`}
       >
-        <div className="min-h-screen bg-black">
-          {/* HEADER CON LOGO - DEBUG VISIBILE */}
-          <header className="w-full border-b border-neutral-800 bg-black/90 px-4 py-3 flex items-center gap-3">
-            <img
-              src="/logo/logo-eclipse.png"
-              alt="Eclipse Noir"
-              className="h-16 w-auto border-2 border-red-500 bg-white"
-            />
-            <div className="flex flex-col">
-              <span className="text-xs tracking-[0.3em] uppercase text-neutral-400">
-                Eclipse Noir
-              </span>
-              <span className="text-[11px] text-neutral-500">
-                Sistema ingressi · lista ospiti · QR access
-              </span>
-            </div>
-          </header>
-
-          {/* CONTENUTO PAGINE */}
-          <main className="relative">
-            {children}
-          </main>
+        {/* MASCHERA GIGANTE SEMI-TRASPARENTE (30%) */}
+        <div className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center opacity-30">
+          <Image
+            src="/logo/eclipse.png"
+            alt="Eclipse Noir Mask"
+            width={600}
+            height={600}
+            className="w-[420px] sm:w-[520px] md:w-[620px] h-auto object-contain"
+          />
         </div>
+
+        {/* VIGNETTA SCURA SOPRA LA MASCHERA */}
+        <div
+          className="
+            pointer-events-none
+            fixed
+            inset-0
+            z-10
+            bg-[radial-gradient(circle,rgba(0,0,0,0)_0%,rgba(0,0,0,0.85)_75%)]
+          "
+        ></div>
+
+        {/* HEADER */}
+        <Header />
+
+        {/* CONTENUTO PAGINE */}
+        <main className="z-20 flex-grow px-4 py-8 max-w-4xl w-full mx-auto">
+          {children}
+        </main>
       </body>
     </html>
   );

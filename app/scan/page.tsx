@@ -1,29 +1,43 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Scanner } from '@yudiel/react-qr-scanner';
+import { useState } from "react";
+import { Scanner } from "@yudiel/react-qr-scanner";
+import ScanResultModal from "../components/ui/ScanResultModal";
 
-type ScanStatus = 'idle' | 'loading' | 'ok' | 'already_used' | 'invalid' | 'error';
+type ScanStatus = "idle" | "loading" | "ok" | "already_used" | "invalid" | "error";
+type ModalStatus = "success" | "error" | "warning";
 
-const SCAN_PIN = process.env.NEXT_PUBLIC_SCAN_PIN || '2222';
+const SCAN_PIN = process.env.NEXT_PUBLIC_SCAN_PIN || "2222";
 
 export default function ScanPage() {
   const [authenticated, setAuthenticated] = useState(false);
-  const [pin, setPin] = useState('');
-  const [status, setStatus] = useState<ScanStatus>('idle');
-  const [message, setMessage] = useState<string>('');
+  const [pin, setPin] = useState("");
+  const [status, setStatus] = useState<ScanStatus>("idle");
+  const [message, setMessage] = useState<string>("");
   const [lastGuest, setLastGuest] = useState<string | null>(null);
   const [lastEvent, setLastEvent] = useState<string | null>(null);
-  const [codeInput, setCodeInput] = useState<string>('');
-  const [lastScannedCode, setLastScannedCode] = useState<string>(''); // 👈 DEBUG: ultimo QR letto
+  const [codeInput, setCodeInput] = useState<string>("");
+  const [lastScannedCode, setLastScannedCode] = useState<string>("");
+
+  const [resultModal, setResultModal] = useState<{
+    open: boolean;
+    status: ModalStatus;
+    title: string;
+    message: string;
+  }>({
+    open: false,
+    status: "success",
+    title: "",
+    message: "",
+  });
 
   const handlePinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (pin === SCAN_PIN) {
       setAuthenticated(true);
-      setPin('');
+      setPin("");
     } else {
-      alert('PIN errato');
+      alert("PIN errato");
     }
   };
 
@@ -32,49 +46,90 @@ export default function ScanPage() {
     if (!code.trim()) return;
 
     const cleanedCode = code.trim();
-    setStatus('loading');
-    setMessage('Verifica in corso...');
+    setStatus("loading");
+    setMessage("Verifica in corso...");
     setLastGuest(null);
     setLastEvent(null);
-    setLastScannedCode(cleanedCode); // 👈 mostriamo cosa stiamo davvero mandando alla API
+    setLastScannedCode(cleanedCode);
 
     try {
-      const res = await fetch('/api/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: cleanedCode }),
       });
 
       const data = await res.json();
 
-      if (data.status === 'ok') {
-        setStatus('ok');
-        setMessage(data.message || 'INGRESSO OK');
+      if (data.status === "ok") {
+        setStatus("ok");
+        setMessage(data.message || "INGRESSO OK");
         setLastGuest(data.guestName || null);
         setLastEvent(data.eventLabel || null);
-      } else if (data.status === 'already_used') {
-        setStatus('already_used');
-        setMessage(data.message || 'QR GIÀ UTILIZZATO');
+
+        setResultModal({
+          open: true,
+          status: "success",
+          title: "QR VALIDO",
+          message:
+            data.guestName && data.eventLabel
+              ? `${data.guestName} – ${data.eventLabel}`
+              : "Ospite in lista. Puoi farlo entrare.",
+        });
+      } else if (data.status === "already_used") {
+        setStatus("already_used");
+        setMessage(data.message || "QR GIÀ UTILIZZATO");
         setLastGuest(data.guestName || null);
         setLastEvent(data.eventLabel || null);
-      } else if (data.status === 'invalid') {
-        setStatus('invalid');
-        setMessage(data.message || 'QR NON VALIDO');
+
+        setResultModal({
+          open: true,
+          status: "warning",
+          title: "QR GIÀ UTILIZZATO",
+          message:
+            data.guestName && data.eventLabel
+              ? `${data.guestName} – ${data.eventLabel}`
+              : "Questo codice è già stato usato in precedenza.",
+        });
+      } else if (data.status === "invalid") {
+        setStatus("invalid");
+        setMessage(data.message || "QR NON VALIDO");
+
+        setResultModal({
+          open: true,
+          status: "error",
+          title: "QR NON VALIDO",
+          message: "Il codice non è riconosciuto dal sistema.",
+        });
       } else {
-        setStatus('error');
-        setMessage(data.message || 'Errore');
+        setStatus("error");
+        setMessage(data.message || "Errore");
+
+        setResultModal({
+          open: true,
+          status: "error",
+          title: "ERRORE",
+          message: data.message || "Si è verificato un errore.",
+        });
       }
     } catch (err) {
       console.error(err);
-      setStatus('error');
-      setMessage('Errore di rete o server.');
+      setStatus("error");
+      setMessage("Errore di rete o server.");
+
+      setResultModal({
+        open: true,
+        status: "error",
+        title: "ERRORE DI RETE",
+        message: "Errore di rete o del server. Riprova.",
+      });
     }
   };
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!codeInput.trim()) {
-      alert('Inserisci un codice o scansiona il QR.');
+      alert("Inserisci un codice o scansiona il QR.");
       return;
     }
     await verifyCode(codeInput);
@@ -83,22 +138,20 @@ export default function ScanPage() {
   const handleScanFromCamera = async (codes: any[]) => {
     if (!codes || codes.length === 0) return;
 
-    // la libreria passa un array di codici, prendiamo il primo
     const raw =
       codes[0]?.rawValue ||
       codes[0]?.value ||
-      (typeof codes[0] === 'string' ? codes[0] : '');
+      (typeof codes[0] === "string" ? codes[0] : "");
 
     if (!raw) return;
 
-    // evitiamo di spammare richieste mentre è in loading
-    if (status === 'loading') return;
+    if (status === "loading") return;
 
     await verifyCode(raw);
   };
 
   const handleCameraError = (error: any) => {
-    console.error('Errore lettore QR:', error);
+    console.error("Errore lettore QR:", error);
   };
 
   if (!authenticated) {
@@ -131,24 +184,24 @@ export default function ScanPage() {
   }
 
   const statusColor =
-    status === 'ok'
-      ? 'text-emerald-400'
-      : status === 'already_used'
-      ? 'text-amber-400'
-      : status === 'invalid' || status === 'error'
-      ? 'text-red-400'
-      : 'text-neutral-300';
+    status === "ok"
+      ? "text-emerald-400"
+      : status === "already_used"
+      ? "text-amber-400"
+      : status === "invalid" || status === "error"
+      ? "text-red-400"
+      : "text-neutral-300";
 
   const statusLabel =
-    status === 'ok'
-      ? 'INGRESSO OK'
-      : status === 'already_used'
-      ? 'QR GIÀ UTILIZZATO'
-      : status === 'invalid'
-      ? 'QR NON VALIDO'
-      : status === 'loading'
-      ? 'VERIFICA...'
-      : 'PRONTO';
+    status === "ok"
+      ? "INGRESSO OK"
+      : status === "already_used"
+      ? "QR GIÀ UTILIZZATO"
+      : status === "invalid"
+      ? "QR NON VALIDO"
+      : status === "loading"
+      ? "VERIFICA..."
+      : "PRONTO";
 
   return (
     <div className="min-h-screen flex flex-col bg-black text-neutral-100">
@@ -174,7 +227,7 @@ export default function ScanPage() {
             <Scanner
               onScan={handleScanFromCamera}
               onError={handleCameraError}
-              styles={{ container: { width: '100%', height: '100%' } }}
+              styles={{ container: { width: "100%", height: "100%" } }}
             />
           </div>
 
@@ -190,7 +243,7 @@ export default function ScanPage() {
                 type="text"
                 value={codeInput}
                 onChange={(e) => setCodeInput(e.target.value)}
-                className="w-full rounded-lg bg-black border border-neutral-700 px-3 py-2 outline-none focus:border-emerald-500 text-sm"
+                className="w-full rounded-lg bg-black border border-neutral-700 px-3 py-2 text-sm outline-none focus:border-emerald-500"
                 placeholder="Inserisci il codice EN-XXXXXXX o il contenuto del QR"
               />
             </label>
@@ -214,11 +267,7 @@ export default function ScanPage() {
             </p>
           </div>
 
-          {message && (
-            <p className="text-sm text-neutral-300">
-              {message}
-            </p>
-          )}
+          {message && <p className="text-sm text-neutral-300">{message}</p>}
 
           {lastGuest && (
             <div className="mt-2">
@@ -250,10 +299,25 @@ export default function ScanPage() {
           )}
 
           <p className="mt-auto text-[11px] text-neutral-500">
-            Inquadra il QR al centro del riquadro. Se la camera dà problemi, puoi sempre inserire il codice manualmente.
+            Inquadra il QR al centro del riquadro. Se la camera dà problemi, puoi
+            sempre inserire il codice manualmente.
           </p>
         </div>
       </main>
+
+      {/* MODALE RISULTATO SCAN */}
+      <ScanResultModal
+        open={resultModal.open}
+        status={resultModal.status}
+        title={resultModal.title}
+        message={resultModal.message}
+        onClose={() =>
+          setResultModal((prev) => ({
+            ...prev,
+            open: false,
+          }))
+        }
+      />
     </div>
   );
 }
