@@ -19,6 +19,9 @@ export default function ScanPage() {
   const [codeInput, setCodeInput] = useState<string>("");
   const [lastScannedCode, setLastScannedCode] = useState<string>("");
 
+  // 🔒 blocca/sblocca lo scanner
+  const [scanLocked, setScanLocked] = useState(false);
+
   const [resultModal, setResultModal] = useState<{
     open: boolean;
     status: ModalStatus;
@@ -132,6 +135,8 @@ export default function ScanPage() {
       alert("Inserisci un codice o scansiona il QR.");
       return;
     }
+    // blocchiamo lo scanner mentre verifichiamo
+    setScanLocked(true);
     await verifyCode(codeInput);
   };
 
@@ -145,8 +150,11 @@ export default function ScanPage() {
 
     if (!raw) return;
 
-    if (status === "loading") return;
+    // se è in loading o il popup è aperto / bloccato, NON rifacciamo la chiamata
+    if (status === "loading" || scanLocked) return;
 
+    // blocchiamo lo scanner finché il buttafuori non preme OK
+    setScanLocked(true);
     await verifyCode(raw);
   };
 
@@ -311,12 +319,20 @@ export default function ScanPage() {
         status={resultModal.status}
         title={resultModal.title}
         message={resultModal.message}
-        onClose={() =>
+        onClose={() => {
+          // quando il buttafuori preme OK:
+          // chiudiamo modale, sblocchiamo scanner e riportiamo lo stato a PRONTO
           setResultModal((prev) => ({
             ...prev,
             open: false,
-          }))
-        }
+          }));
+          setStatus("idle");
+          setMessage("");
+          setLastGuest(null);
+          setLastEvent(null);
+          setLastScannedCode("");
+          setScanLocked(false);
+        }}
       />
     </div>
   );
