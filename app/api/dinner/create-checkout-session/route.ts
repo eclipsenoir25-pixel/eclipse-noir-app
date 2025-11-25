@@ -5,11 +5,16 @@ import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
 
+// ENV
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY as string;
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL as string;
 const DINNER_PRICE_EUR = Number(process.env.DINNER_PRICE_EUR || "40");
+
+// Capienza totale
 const TOTAL_CAPACITY = 90;
-const COLLECTION_NAME = "bookings";
+
+// Collection dedicata all’evento
+const COLLECTION_NAME = "dinnerbookings";
 
 if (!stripeSecretKey) {
   throw new Error("STRIPE_SECRET_KEY non è impostata nelle variabili d'ambiente.");
@@ -58,7 +63,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validazione accompagnatori lato server
+    // Validazione accompagnatori
     if (numeroOspiti > 1) {
       if (accompagnatori.length !== numeroOspiti - 1) {
         return NextResponse.json(
@@ -71,12 +76,7 @@ export async function POST(req: NextRequest) {
       }
       for (let i = 0; i < accompagnatori.length; i++) {
         const c = accompagnatori[i];
-        if (
-          !c ||
-          !c.nome?.trim() ||
-          !c.cognome?.trim() ||
-          !c.telefono?.trim()
-        ) {
+        if (!c.nome?.trim() || !c.cognome?.trim() || !c.telefono?.trim()) {
           return NextResponse.json(
             {
               error:
@@ -88,9 +88,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // DB
     const { db } = await connectToDatabase();
 
-    // Calcolo posti già occupati (pending + paid) per tipo "dinner"
+    // Calcolo posti già occupati (pending + paid)
     const agg = await db
       .collection(COLLECTION_NAME)
       .aggregate<{ totalGuests: number }>([
@@ -124,15 +125,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Calcolo posti auto
     const postiAuto = Math.max(1, Math.ceil(numeroOspiti / 5));
 
-    // Creiamo manualmente un _id per poterlo usare come bookingId in Stripe
+    // Creo un ID manuale che sarà la prenotazione in pending
     const bookingObjectId = new ObjectId();
     const bookingId = bookingObjectId.toHexString();
 
     const now = new Date();
 
-    // Salvataggio prenotazione "pending" nel DB
+    // SALVIAMO LA PRENOTAZIONE IN STATO "PENDING"
     await db.collection(COLLECTION_NAME).insertOne({
       _id: bookingObjectId,
       bookingId,
@@ -157,10 +159,10 @@ export async function POST(req: NextRequest) {
 
     const amountTotal = Math.round(DINNER_PRICE_EUR * numeroOspiti * 100);
 
+    // CREA LA SESSIONE STRIPE
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
-      // Apple Pay e Google Pay vengono gestiti automaticamente da Stripe su Checkout
       line_items: [
         {
           quantity: 1,
@@ -185,7 +187,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Aggiorniamo la prenotazione con l'id della sessione
+    // Aggiorno la prenotazione con l'ID della sessione
     await db.collection(COLLECTION_NAME).updateOne(
       { _id: bookingObjectId },
       {

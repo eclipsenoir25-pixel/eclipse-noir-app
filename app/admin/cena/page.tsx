@@ -2,74 +2,140 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Companion = {
+type Accompagnatore = {
   nome: string;
+  cognome: string;
   telefono: string;
 };
 
-type DinnerRequest = {
+type DinnerBooking = {
   _id: string;
-  guestName: string;
-  phone: string;
-  eventId: string;
-  status: string;
-  arrivalTime?: string;
-  notes?: string;
-  createdAt?: string;
-  companions?: Companion[];
+  bookingId: string;
+  nomeReferente: string;
+  telefonoReferente: string;
+  numeroOspiti: number;
+  accompagnatori?: Accompagnatore[];
+  note?: string;
+  postiAutoAssegnati: number;
+  pagamentoEffettuato: boolean;
+  statoPagamento: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
+const MAX_SEATS = 90;
+
 export default function AdminDinnerPage() {
-  const [requests, setRequests] = useState<DinnerRequest[]>([]);
+  const [bookings, setBookings] = useState<DinnerBooking[]>([]);
   const [loading, setLoading] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "paid" | "canceled" | "expired">("all");
+  const [search, setSearch] = useState("");
 
-  const MAX_SEATS = 90;
-
-  async function loadRequests() {
+  async function loadBookings() {
     try {
       setLoading(true);
-      const res = await fetch("/api/requests/list");
+      const res = await fetch("/api/dinner/list");
+      if (!res.ok) {
+        throw new Error("Errore nella risposta API");
+      }
       const data = await res.json();
-      const all: DinnerRequest[] = data.requests || [];
-
-      // solo cena spettacolo
-      const dinners = all.filter((r) =>
-        (r.eventId || "").includes("CENA SPETTACOLO")
-      );
-
-      setRequests(dinners);
+      const list: DinnerBooking[] = data.bookings || [];
+      setBookings(list);
     } catch (err) {
-      console.error("Errore caricamento cena spettacolo:", err);
+      console.error("Errore caricamento prenotazioni cena:", err);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadRequests();
+    loadBookings();
   }, []);
 
-  const totals = useMemo(() => {
-    let totalGuests = 0;
-    let totalRequests = requests.length;
+  const filtered = useMemo(() => {
+    return bookings
+      .filter((b) =>
+        filterStatus === "all" ? true : (b.statoPagamento || "pending") === filterStatus
+      )
+      .filter((b) => {
+        if (!search.trim()) return true;
+        const term = search.trim().toLowerCase();
+        return (
+          b.nomeReferente.toLowerCase().includes(term) ||
+          b.telefonoReferente.toLowerCase().includes(term) ||
+          (b.bookingId && b.bookingId.toLowerCase().includes(term))
+        );
+      });
+  }, [bookings, filterStatus, search]);
 
-    requests.forEach((r) => {
-      const compCount = r.companions ? r.companions.length : 0;
-      const n = 1 + compCount; // referente + accompagnatori
-      totalGuests += n;
+  const totals = useMemo(() => {
+    const totalBookings = bookings.length;
+    let totalGuests = 0;
+    let totalAuto = 0;
+    let paidCount = 0;
+
+    bookings.forEach((b) => {
+      totalGuests += b.numeroOspiti || 0;
+      totalAuto += b.postiAutoAssegnati || 0;
+      if (b.statoPagamento === "paid") paidCount++;
     });
 
-    const available = Math.max(MAX_SEATS - totalGuests, 0);
+    const availableSeats = Math.max(MAX_SEATS - totalGuests, 0);
 
     return {
-      totalRequests,
+      totalBookings,
       totalGuests,
-      available,
+      totalAuto,
+      availableSeats,
+      paidCount,
     };
-  }, [requests]);
+  }, [bookings]);
+
+  function formatDate(dateStr?: string | null) {
+    if (!dateStr) return "-";
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    return d.toLocaleString("it-IT", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function statusClass(status: string) {
+    switch (status) {
+      case "paid":
+        return "border-emerald-500/60 text-emerald-300 bg-emerald-900/25";
+      case "pending":
+        return "border-yellow-500/60 text-yellow-200 bg-yellow-900/25";
+      case "canceled":
+        return "border-red-500/60 text-red-300 bg-red-900/25";
+      case "expired":
+        return "border-orange-500/60 text-orange-300 bg-orange-900/25";
+      default:
+        return "border-neutral-500/60 text-neutral-200 bg-neutral-900/40";
+    }
+  }
+
+  function statusLabel(status: string) {
+    switch (status) {
+      case "paid":
+        return "PAGATO";
+      case "pending":
+        return "IN ATTESA";
+      case "canceled":
+        return "ANNULLATO";
+      case "expired":
+        return "SCADUTO";
+      default:
+        return status.toUpperCase();
+    }
+  }
 
   return (
-    <div className="px-4 py-8 max-w-5xl mx-auto text-neutral-100">
+    <div className="px-4 py-8 max-w-6xl mx-auto text-neutral-100">
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
         <div>
@@ -77,7 +143,10 @@ export default function AdminDinnerPage() {
             Cena Spettacolo – Villa Tre Colli
           </h1>
           <p className="text-sm text-neutral-400 mt-1">
-            Prenotazioni cena con accesso privilegiato a Eclipse Noir.
+            Prenotazioni cena con posto auto garantito all&apos;Eclipse Noir.
+          </p>
+          <p className="text-xs text-neutral-500 mt-1">
+            Dashboard collegata alla collection <span className="font-mono">dinnerbookings</span>.
           </p>
         </div>
 
@@ -85,9 +154,7 @@ export default function AdminDinnerPage() {
         <div className="flex flex-col items-start sm:items-end gap-1 text-sm">
           <div>
             <span className="text-neutral-400">Posti totali: </span>
-            <span className="font-semibold text-neutral-100">
-              {MAX_SEATS}
-            </span>
+            <span className="font-semibold text-neutral-100">{MAX_SEATS}</span>
           </div>
           <div>
             <span className="text-neutral-400">Posti prenotati: </span>
@@ -99,26 +166,32 @@ export default function AdminDinnerPage() {
             <span className="text-neutral-400">Posti liberi: </span>
             <span
               className={`font-semibold ${
-                totals.available <= 0
+                totals.availableSeats <= 0
                   ? "text-red-400"
-                  : totals.available <= 10
+                  : totals.availableSeats <= 10
                   ? "text-amber-400"
                   : "text-emerald-400"
               }`}
             >
-              {totals.available}
+              {totals.availableSeats}
+            </span>
+          </div>
+          <div>
+            <span className="text-neutral-400">Posti auto assegnati: </span>
+            <span className="font-semibold text-neutral-100">
+              {totals.totalAuto}
             </span>
           </div>
           <div className="text-[11px] text-neutral-500">
-            Prenotazioni: {totals.totalRequests}
+            Prenotazioni totali: {totals.totalBookings} – Pagate: {totals.paidCount}
           </div>
         </div>
       </div>
 
-      {/* BOTTONI AZIONE */}
-      <div className="mb-5 flex flex-wrap gap-2">
+      {/* FILTRI / AZIONI */}
+      <div className="mb-5 flex flex-wrap gap-2 items-center">
         <button
-          onClick={loadRequests}
+          onClick={loadBookings}
           disabled={loading}
           className="
             text-xs px-3 py-1.5 rounded-full
@@ -140,22 +213,62 @@ export default function AdminDinnerPage() {
         >
           Stampa lista (PDF)
         </button>
+
+        {/* Filtro stato */}
+        <div className="flex flex-wrap gap-1 ml-auto text-xs">
+          {[
+            { value: "all", label: "Tutti" },
+            { value: "paid", label: "Pagati" },
+            { value: "pending", label: "In attesa" },
+            { value: "canceled", label: "Annullati" },
+            { value: "expired", label: "Scaduti" },
+          ].map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFilterStatus(f.value as any)}
+              className={`
+                px-3 py-1 rounded-full border text-xs
+                ${
+                  filterStatus === f.value
+                    ? "border-[#d4af37] text-[#f3cd63] bg-[#d4af37]/10"
+                    : "border-neutral-700 text-neutral-300 hover:bg-neutral-900/50"
+                }
+              `}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Ricerca */}
+      <div className="mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Cerca per nome referente, telefono o bookingId..."
+          className="
+            w-full max-w-sm text-xs px-3 py-2 rounded-full
+            bg-neutral-900 border border-neutral-700
+            focus:outline-none focus:ring-1 focus:ring-[#d4af37]
+          "
+        />
       </div>
 
       {/* LISTA PRENOTAZIONI */}
-      {requests.length === 0 ? (
+      {filtered.length === 0 ? (
         <p className="text-neutral-400 text-sm">
-          Nessuna prenotazione per la cena spettacolo al momento.
+          Nessuna prenotazione trovata con i filtri attuali.
         </p>
       ) : (
         <div className="space-y-4 print:space-y-1">
-          {requests.map((r) => {
-            const compCount = r.companions ? r.companions.length : 0;
-            const guests = 1 + compCount;
+          {filtered.map((b) => {
+            const accCount = b.accompagnatori?.length || 0;
 
             return (
               <div
-                key={r._id}
+                key={b._id}
                 className="
                   rounded-xl border border-[#d4af37]/30 bg-black/70
                   px-4 py-3 sm:px-5 sm:py-4
@@ -167,48 +280,44 @@ export default function AdminDinnerPage() {
                   {/* Info principale */}
                   <div className="space-y-1">
                     <div className="text-xs text-neutral-500 uppercase tracking-[0.2em]">
-                      Ospite
+                      Referente
                     </div>
                     <div className="text-lg font-semibold">
-                      {r.guestName}
+                      {b.nomeReferente}
                     </div>
                     <div className="text-sm text-neutral-300">
                       <span className="text-neutral-500">Telefono: </span>
-                      {r.phone}
+                      {b.telefonoReferente}
                     </div>
                     <div className="text-sm text-neutral-300">
                       <span className="text-neutral-500">
                         N. ospiti a cena:{" "}
                       </span>
-                      {guests}{" "}
+                      {b.numeroOspiti}{" "}
                       <span className="text-neutral-400 text-xs">
-                        (referente + {compCount} accompagnatori)
+                        (referente + {Math.max(b.numeroOspiti - 1, 0)} accompagnatori)
                       </span>
                     </div>
-                    {r.arrivalTime && (
-                      <div className="text-sm text-neutral-300">
-                        <span className="text-neutral-500">
-                          Orario arrivo:{" "}
-                        </span>
-                        {r.arrivalTime}
-                      </div>
-                    )}
-                    {r.notes && (
+                    <div className="text-sm text-neutral-300">
+                      <span className="text-neutral-500">Posti auto: </span>
+                      {b.postiAutoAssegnati}
+                    </div>
+                    {b.note && (
                       <div className="text-sm text-neutral-300 mt-1">
                         <span className="text-neutral-500">Note: </span>
-                        {r.notes}
+                        {b.note}
                       </div>
                     )}
 
-                    {r.companions && r.companions.length > 0 && (
+                    {accCount > 0 && (
                       <div className="mt-2 text-[11px] text-neutral-300">
                         <span className="text-neutral-500">
                           Dettaglio accompagnatori:
                         </span>
                         <ul className="mt-1 list-disc list-inside space-y-0.5">
-                          {r.companions.map((c, i) => (
+                          {b.accompagnatori!.map((c, i) => (
                             <li key={i}>
-                              {c.nome} –{" "}
+                              {c.nome} {c.cognome} –{" "}
                               <span className="text-neutral-400">
                                 {c.telefono}
                               </span>
@@ -220,38 +329,41 @@ export default function AdminDinnerPage() {
                   </div>
 
                   {/* Stato / info tecniche */}
-                  <div className="flex flex-col items-start sm:items-end gap-2 min-w-[160px]">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-col items-start sm:items-end gap-2 min-w-[180px]">
+                    <div className="flex flex-col items-start sm:items-end gap-1">
                       <span className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">
-                        Stato richiesta
+                        Stato pagamento
                       </span>
                       <span
                         className={`
                           text-[11px] px-2 py-1 rounded-full border
-                          ${
-                            r.status === "approved"
-                              ? "border-emerald-500/60 text-emerald-300 bg-emerald-900/20"
-                              : r.status === "rejected"
-                              ? "border-red-500/60 text-red-300 bg-red-900/20"
-                              : "border-yellow-500/60 text-yellow-200 bg-yellow-900/20"
-                          }
+                          ${statusClass(b.statoPagamento)}
                         `}
                       >
-                        {r.status?.toUpperCase() || "PENDING"}
+                        {statusLabel(b.statoPagamento)}
                       </span>
                     </div>
 
                     <div className="text-[11px] text-neutral-500 text-right">
-                      ID: {r._id}
+                      Booking ID: {b.bookingId}
                     </div>
-                    {r.createdAt && (
+                    <div className="text-[11px] text-neutral-500 text-right">
+                      DB _id: {b._id}
+                    </div>
+                    {b.createdAt && (
                       <div className="text-[11px] text-neutral-500 text-right">
-                        Creata: {r.createdAt}
+                        Creata: {formatDate(b.createdAt)}
                       </div>
                     )}
+                    {b.updatedAt && (
+                      <div className="text-[11px] text-neutral-500 text-right">
+                        Aggiornata: {formatDate(b.updatedAt)}
+                      </div>
+                    )}
+
                     <p className="text-[11px] text-neutral-400 text-right">
-                      Il QR per l&apos;ingresso a Eclipse viene gestito da
-                      /admin/requests una volta approvata la richiesta.
+                      Accesso Eclipse Noir con posto auto riservato
+                      legato a questa prenotazione.
                     </p>
                   </div>
                 </div>

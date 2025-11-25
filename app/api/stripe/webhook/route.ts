@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { connectToDatabase } from "@/lib/mongodb";
-import { ObjectId } from "mongodb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// ENV
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY as string;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET as string;
-const COLLECTION_NAME = "bookings";
+
+// Collection dedicata Cena Spettacolo
+const COLLECTION_NAME = "dinnerbookings";
 
 if (!stripeSecretKey) {
   throw new Error("STRIPE_SECRET_KEY non è impostata nelle variabili d'ambiente.");
@@ -30,15 +32,13 @@ export async function POST(req: NextRequest) {
 
   let event: Stripe.Event;
 
+  // Stripe richiede il RAW BODY per verificare la firma
   try {
     const rawBody = await req.text();
     event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
   } catch (err: any) {
-    console.error("Errore nella verifica del webhook Stripe:", err?.message || err);
-    return new NextResponse(
-      `Webhook Error: ${err?.message || "impossibile verificare la firma"}`,
-      { status: 400 }
-    );
+    console.error("❌ Errore verifica firma Stripe:", err?.message || err);
+    return new NextResponse(`Webhook Error: ${err?.message}`, { status: 400 });
   }
 
   try {
@@ -46,14 +46,13 @@ export async function POST(req: NextRequest) {
     const collection = db.collection(COLLECTION_NAME);
 
     switch (event.type) {
+      // 🔥 PAGAMENTO COMPLETATO
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const bookingId = session.metadata?.bookingId;
 
         if (!bookingId) {
-          console.warn(
-            "checkout.session.completed ricevuto senza bookingId in metadata."
-          );
+          console.warn("⚠️ Webhook senza bookingId.");
           break;
         }
 
@@ -76,13 +75,14 @@ export async function POST(req: NextRequest) {
           }
         );
 
+        console.log("✅ Prenotazione segnata come PAGATA:", bookingId);
         break;
       }
 
+      // 🔥 SESSIONE SCADUTA (non pagata)
       case "checkout.session.expired": {
         const session = event.data.object as Stripe.Checkout.Session;
         const bookingId = session.metadata?.bookingId;
-
         if (!bookingId) break;
 
         await collection.updateOne(
@@ -95,15 +95,20 @@ export async function POST(req: NextRequest) {
           }
         );
 
+        console.log("⚠️ Sessione scaduta:", bookingId);
         break;
       }
 
+      // 🔥 PAGAMENTO NON RIUSCITO
       case "payment_intent.payment_failed": {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
+
+        // Recupera la sessione da payment_intent
         const sessionList = await stripe.checkout.sessions.list({
           payment_intent: paymentIntent.id,
           limit: 1,
         });
+
         const session = sessionList.data[0];
         const bookingId = session?.metadata?.bookingId;
 
@@ -119,18 +124,18 @@ export async function POST(req: NextRequest) {
           );
         }
 
+        console.log("❌ Pagamento fallito:", bookingId);
         break;
       }
 
-      default: {
-        // Altri eventi non gestiti esplicitamente
+      default:
+        console.log("Evento Stripe non gestito:", event.type);
         break;
-      }
     }
 
     return new NextResponse("OK", { status: 200 });
   } catch (error) {
-    console.error("Errore nella gestione del webhook Stripe:", error);
+    console.error("❌ Errore gestione webhook:", error);
     return new NextResponse("Webhook handler failed", { status: 500 });
   }
 }
