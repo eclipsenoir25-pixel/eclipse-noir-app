@@ -16,17 +16,18 @@ export default function Header() {
 
   return (
     <header className="flex flex-col items-center pt-8 pb-6 bg-transparent z-50 relative">
-      {/* LOGO GROSSO CON GLOW */}
+      {/* LOGO GROSSO, CIRCOLARE, CON GLOW */}
       <div className="flex flex-col items-center mb-4">
-        <div className="rounded-full bg-black/50 p-3 shadow-[0_0_50px_rgba(212,175,55,0.8)]">
-          <Image
-            src="/logo/eclipse.png"
-            width={140}
-            height={140}
-            alt="Eclipse Noir Logo"
-            className="h-[140px] w-[140px] object-contain"
-            priority
-          />
+        <div className="rounded-full p-1 shadow-[0_0_50px_rgba(212,175,55,0.9)] bg-[radial-gradient(circle,rgba(212,175,55,0.8)_0%,rgba(0,0,0,0.95)_70%)]">
+          <div className="relative h-32 w-32 overflow-hidden rounded-full bg-black">
+            <Image
+              src="/logo/eclipse.png"
+              alt="Eclipse Noir Logo"
+              fill
+              className="object-contain"
+              priority
+            />
+          </div>
         </div>
       </div>
 
