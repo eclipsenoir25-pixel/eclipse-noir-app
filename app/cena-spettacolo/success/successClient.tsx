@@ -41,8 +41,8 @@ export default function SuccessClient() {
         Prenotazione Confermata ✔️
       </h1>
       <p className="text-gray-300 max-w-xl mx-auto">
-        La tua Cena Spettacolo è ufficialmente registrata.{" "}
-        Tavolo confermato a <strong>Villa Tre Colli</strong> e
+        La tua Cena Spettacolo è ufficialmente registrata. Tavolo confermato a{" "}
+        <strong>Villa Tre Colli</strong> e
         <span className="text-purple-300 font-semibold">
           {" "}
           posto auto garantito all’Eclipse Noir{" "}
@@ -105,9 +105,10 @@ export default function SuccessClient() {
         {/* Info aggiuntive */}
         <div className="space-y-3">
           <p className="text-sm text-gray-300 leading-relaxed">
-            Il DJ set Eclipse Noir inizierà già durante la cena.  
-            Dopo cena potrai raggiungere l’Eclipse Noir con i{" "}
-            <strong>posti auto riservati e garantiti</strong> per la tua prenotazione.
+            Il DJ set Eclipse Noir inizierà già durante la cena. Dopo cena
+            potrai raggiungere l’Eclipse Noir con i{" "}
+            <strong>posti auto riservati e garantiti</strong> per la tua
+            prenotazione.
           </p>
           <p className="text-sm text-gray-400">
             Mostra questo biglietto all’arrivo.
