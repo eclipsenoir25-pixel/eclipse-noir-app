@@ -5,12 +5,11 @@ import { connectToDatabase } from "@/lib/mongodb";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// ENV
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY as string;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET as string;
 
-// Collection dedicata Cena Spettacolo
-const COLLECTION_NAME = "dinnerbookings";
+const DINNER_COLLECTION = "dinnerbookings";
+const PARKING_COLLECTION = "parkingbookings";
 
 if (!stripeSecretKey) {
   throw new Error("STRIPE_SECRET_KEY non è impostata nelle variabili d'ambiente.");
@@ -32,7 +31,6 @@ export async function POST(req: NextRequest) {
 
   let event: Stripe.Event;
 
-  // Stripe richiede il RAW BODY per verificare la firma
   try {
     const rawBody = await req.text();
     event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
@@ -43,16 +41,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const { db } = await connectToDatabase();
-    const collection = db.collection(COLLECTION_NAME);
 
     switch (event.type) {
-      // 🔥 PAGAMENTO COMPLETATO
+      // PAGAMENTO COMPLETATO
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const bookingId = session.metadata?.bookingId;
+        const tipo = session.metadata?.tipo; // "dinner" | "parking"
 
-        if (!bookingId) {
-          console.warn("⚠️ Webhook senza bookingId.");
+        if (!bookingId || !tipo) {
+          console.warn("⚠️ Webhook senza bookingId o tipo.");
           break;
         }
 
@@ -61,8 +59,20 @@ export async function POST(req: NextRequest) {
             ? session.payment_intent
             : session.payment_intent?.id;
 
-        await collection.updateOne(
-          { bookingId, tipo: "dinner" },
+        const collectionName =
+          tipo === "dinner"
+            ? DINNER_COLLECTION
+            : tipo === "parking"
+            ? PARKING_COLLECTION
+            : null;
+
+        if (!collectionName) {
+          console.warn("⚠️ Tipo prenotazione non riconosciuto:", tipo);
+          break;
+        }
+
+        await db.collection(collectionName).updateOne(
+          { bookingId, tipo },
           {
             $set: {
               pagamentoEffettuato: true,
@@ -75,18 +85,29 @@ export async function POST(req: NextRequest) {
           }
         );
 
-        console.log("✅ Prenotazione segnata come PAGATA:", bookingId);
+        console.log(`✅ Prenotazione ${bookingId} (${tipo}) segnata come PAGATA`);
         break;
       }
 
-      // 🔥 SESSIONE SCADUTA (non pagata)
+      // SESSIONE SCADUTA
       case "checkout.session.expired": {
         const session = event.data.object as Stripe.Checkout.Session;
         const bookingId = session.metadata?.bookingId;
-        if (!bookingId) break;
+        const tipo = session.metadata?.tipo;
 
-        await collection.updateOne(
-          { bookingId, tipo: "dinner", statoPagamento: "pending" },
+        if (!bookingId || !tipo) break;
+
+        const collectionName =
+          tipo === "dinner"
+            ? DINNER_COLLECTION
+            : tipo === "parking"
+            ? PARKING_COLLECTION
+            : null;
+
+        if (!collectionName) break;
+
+        await db.collection(collectionName).updateOne(
+          { bookingId, tipo, statoPagamento: "pending" },
           {
             $set: {
               statoPagamento: "expired",
@@ -95,15 +116,14 @@ export async function POST(req: NextRequest) {
           }
         );
 
-        console.log("⚠️ Sessione scaduta:", bookingId);
+        console.log(`⚠️ Sessione scaduta: ${bookingId} (${tipo})`);
         break;
       }
 
-      // 🔥 PAGAMENTO NON RIUSCITO
+      // PAGAMENTO NON RIUSCITO
       case "payment_intent.payment_failed": {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
 
-        // Recupera la sessione da payment_intent
         const sessionList = await stripe.checkout.sessions.list({
           payment_intent: paymentIntent.id,
           limit: 1,
@@ -111,20 +131,30 @@ export async function POST(req: NextRequest) {
 
         const session = sessionList.data[0];
         const bookingId = session?.metadata?.bookingId;
+        const tipo = session?.metadata?.tipo;
 
-        if (bookingId) {
-          await collection.updateOne(
-            { bookingId, tipo: "dinner" },
-            {
-              $set: {
-                statoPagamento: "canceled",
-                updatedAt: new Date(),
-              },
-            }
-          );
-        }
+        if (!bookingId || !tipo) break;
 
-        console.log("❌ Pagamento fallito:", bookingId);
+        const collectionName =
+          tipo === "dinner"
+            ? DINNER_COLLECTION
+            : tipo === "parking"
+            ? PARKING_COLLECTION
+            : null;
+
+        if (!collectionName) break;
+
+        await db.collection(collectionName).updateOne(
+          { bookingId, tipo },
+          {
+            $set: {
+              statoPagamento: "canceled",
+              updatedAt: new Date(),
+            },
+          }
+        );
+
+        console.log(`❌ Pagamento fallito: ${bookingId} (${tipo})`);
         break;
       }
 
