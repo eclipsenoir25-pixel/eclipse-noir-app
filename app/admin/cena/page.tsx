@@ -2,6 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+type Companion = {
+  nome: string;
+  telefono: string;
+};
+
 type DinnerRequest = {
   _id: string;
   guestName: string;
@@ -9,9 +14,9 @@ type DinnerRequest = {
   eventId: string;
   status: string;
   arrivalTime?: string;
-  dinnerGuests?: number;
   notes?: string;
   createdAt?: string;
+  companions?: Companion[];
 };
 
 export default function AdminDinnerPage() {
@@ -27,7 +32,7 @@ export default function AdminDinnerPage() {
       const data = await res.json();
       const all: DinnerRequest[] = data.requests || [];
 
-      // filtra solo quelle di cena spettacolo
+      // solo cena spettacolo
       const dinners = all.filter((r) =>
         (r.eventId || "").includes("CENA SPETTACOLO")
       );
@@ -49,7 +54,8 @@ export default function AdminDinnerPage() {
     let totalRequests = requests.length;
 
     requests.forEach((r) => {
-      const n = r.dinnerGuests && r.dinnerGuests > 0 ? r.dinnerGuests : 1;
+      const compCount = r.companions ? r.companions.length : 0;
+      const n = 1 + compCount; // referente + accompagnatori
       totalGuests += n;
     });
 
@@ -144,8 +150,8 @@ export default function AdminDinnerPage() {
       ) : (
         <div className="space-y-4 print:space-y-1">
           {requests.map((r) => {
-            const guests =
-              r.dinnerGuests && r.dinnerGuests > 0 ? r.dinnerGuests : 1;
+            const compCount = r.companions ? r.companions.length : 0;
+            const guests = 1 + compCount;
 
             return (
               <div
@@ -174,7 +180,10 @@ export default function AdminDinnerPage() {
                       <span className="text-neutral-500">
                         N. ospiti a cena:{" "}
                       </span>
-                      {guests}
+                      {guests}{" "}
+                      <span className="text-neutral-400 text-xs">
+                        (referente + {compCount} accompagnatori)
+                      </span>
                     </div>
                     {r.arrivalTime && (
                       <div className="text-sm text-neutral-300">
@@ -188,6 +197,24 @@ export default function AdminDinnerPage() {
                       <div className="text-sm text-neutral-300 mt-1">
                         <span className="text-neutral-500">Note: </span>
                         {r.notes}
+                      </div>
+                    )}
+
+                    {r.companions && r.companions.length > 0 && (
+                      <div className="mt-2 text-[11px] text-neutral-300">
+                        <span className="text-neutral-500">
+                          Dettaglio accompagnatori:
+                        </span>
+                        <ul className="mt-1 list-disc list-inside space-y-0.5">
+                          {r.companions.map((c, i) => (
+                            <li key={i}>
+                              {c.nome} –{" "}
+                              <span className="text-neutral-400">
+                                {c.telefono}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </div>

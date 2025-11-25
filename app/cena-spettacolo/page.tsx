@@ -1,254 +1,335 @@
 "use client";
 
-import { useState } from "react";
-import EclipsePanel from "../components/ui/EclipsePanel";
+import { useState, useEffect } from "react";
 
-type DinnerStatus = "idle" | "loading" | "success" | "error";
+const DINNER_PRICE = Number(process.env.NEXT_PUBLIC_DINNER_PRICE_EUR || "40");
+
+type Companion = {
+  nome: string;
+  cognome: string;
+  telefono: string;
+};
 
 export default function CenaSpettacoloPage() {
-  const [guestName, setGuestName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [guests, setGuests] = useState<number>(2);
-  const [arrivalTime, setArrivalTime] = useState("");
-  const [notes, setNotes] = useState("");
-  const [privacy, setPrivacy] = useState(false);
-  const [status, setStatus] = useState<DinnerStatus>("idle");
-  const [message, setMessage] = useState<string>("");
+  const [nomeReferente, setNomeReferente] = useState("");
+  const [telefonoReferente, setTelefonoReferente] = useState("");
+  const [numeroOspiti, setNumeroOspiti] = useState(2);
+  const [companions, setCompanions] = useState<Companion[]>([]);
+  const [note, setNote] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const MAX_SEATS = 90; // per ora solo testo informativo
+  const paypalUrl = process.env.NEXT_PUBLIC_PAYPAL_CHECKOUT_URL || "";
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Aggiorna il numero di accompagnatori ogni volta che cambia numeroOspiti
+  useEffect(() => {
+    const neededCompanions = Math.max(0, numeroOspiti - 1);
+    setCompanions((prev) => {
+      const copy = [...prev];
+      if (copy.length < neededCompanions) {
+        while (copy.length < neededCompanions) {
+          copy.push({ nome: "", cognome: "", telefono: "" });
+        }
+      } else if (copy.length > neededCompanions) {
+        copy.length = neededCompanions;
+      }
+      return copy;
+    });
+  }, [numeroOspiti]);
+
+  const handleCompanionChange = (
+    index: number,
+    field: keyof Companion,
+    value: string
+  ) => {
+    setCompanions((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const postiAuto = Math.max(1, Math.ceil(numeroOspiti / 5));
+  const totalAmount = DINNER_PRICE * numeroOspiti;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStatus("idle");
-    setMessage("");
+    setError(null);
+    setSuccessMessage(null);
 
-    if (!privacy) {
-      setStatus("error");
-      setMessage("Devi accettare il trattamento dei dati personali.");
+    if (!nomeReferente.trim() || !telefonoReferente.trim()) {
+      setError("Nome referente e telefono sono obbligatori.");
       return;
     }
 
-    if (!guestName.trim() || !phone.trim() || !guests) {
-      setStatus("error");
-      setMessage("Compila nome, telefono e numero di ospiti.");
+    if (numeroOspiti < 1) {
+      setError("Il numero minimo di ospiti è 1.");
       return;
     }
 
-    const payload = {
-      guestName: guestName.trim(),
-      phone: phone.trim(),
-      eventId: "CENA SPETTACOLO – VILLA TRE COLLI",
-      arrivalTime,
-      dinnerGuests: guests,
-      notes: notes.trim(),
-      type: "dinner", // etichetta per distinguerla lato admin se serve
-    };
+    // Validazione accompagnatori
+    if (numeroOspiti > 1) {
+      for (let i = 0; i < companions.length; i++) {
+        const c = companions[i];
+        if (!c.nome.trim() || !c.cognome.trim() || !c.telefono.trim()) {
+          setError(
+            `Compila tutti i campi per l'accompagnatore n. ${i + 1} (nome, cognome, telefono).`
+          );
+          return;
+        }
+      }
+    }
 
+    setIsSubmitting(true);
     try {
-      setStatus("loading");
-      setMessage("Invio prenotazione in corso...");
-
-      const res = await fetch("/api/requests/create", {
+      const res = await fetch("/api/dinner/create-checkout-session", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          nomeReferente,
+          telefonoReferente,
+          numeroOspiti,
+          accompagnatori: companions,
+          note,
+        }),
       });
 
-      const data = await res.json();
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        const message =
+          data?.error ||
+          "Si è verificato un errore nella creazione della sessione di pagamento.";
+        setError(message);
+        return;
+      }
 
-      if (data.ok) {
-        setStatus("success");
-        setMessage(
-          "Prenotazione ricevuta. Verrai ricontattato da Villa Tre Colli per la conferma."
-        );
-        setGuestName("");
-        setPhone("");
-        setGuests(2);
-        setArrivalTime("");
-        setNotes("");
-        setPrivacy(false);
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
       } else {
-        setStatus("error");
-        setMessage(data.message || "Si è verificato un errore.");
+        setError("Risposta inattesa dal server. Nessun URL di pagamento ricevuto.");
       }
     } catch (err) {
       console.error(err);
-      setStatus("error");
-      setMessage("Errore di comunicazione col server.");
+      setError("Errore di connessione al server. Riprova più tardi.");
+    } finally {
+      setIsSubmitting(false);
     }
-  }
-
-  const statusColor =
-    status === "success"
-      ? "border-emerald-500/60 bg-emerald-900/30 text-emerald-100"
-      : status === "error"
-      ? "border-red-500/60 bg-red-900/30 text-red-100"
-      : "border-neutral-600/60 bg-neutral-900/40 text-neutral-200";
+  };
 
   return (
-    <section className="flex justify-center px-4 py-10">
-      <EclipsePanel className="w-full max-w-2xl">
-        {/* HEADER */}
-        <div className="mb-6 text-center">
-          <div className="text-xs tracking-[0.3em] uppercase text-[#d4af37]/80">
-            Villa Tre Colli · Cena Spettacolo
-          </div>
-          <h1 className="mt-2 text-2xl sm:text-3xl font-semibold text-[#f5f5f5]">
-            Cena Spettacolo &amp; Eclipse Noir
+    <div className="min-h-screen flex justify-center bg-gray-900 px-4 py-10">
+      <div className="w-full max-w-3xl bg-gray-950 text-gray-100 rounded-2xl shadow-xl border border-gray-800 p-6 md:p-8 space-y-6">
+        <header className="space-y-2">
+          <h1 className="text-2xl md:text-3xl font-semibold">
+            Prenotazione Cena Spettacolo – Villa Tre Colli
           </h1>
-          <p className="mt-2 text-sm text-neutral-300">
-            Un percorso esclusivo: cena con dj set e vocalist a Villa Tre Colli,
-            poi ingresso privilegiato a <span className="text-[#d4af37]">Eclipse Noir</span>.
+          <p className="text-sm md:text-base text-gray-300">
+            Compila il modulo, controlla i dati e procedi al pagamento sicuro con Stripe.
           </p>
-          <p className="mt-1 text-xs text-neutral-400">
-            Posti limitati a circa {MAX_SEATS} coperti. Prenotazione obbligatoria.
-          </p>
-        </div>
+        </header>
 
-        {/* INFO MENU */}
-        <div className="mb-6 rounded-xl border border-[#d4af37]/40 bg-black/60 px-4 py-3 text-sm text-neutral-200">
-          <div className="text-xs uppercase tracking-[0.25em] text-[#d4af37]/80 mb-1">
-            Menù Cena Spettacolo
-          </div>
-          <p>
-            <span className="font-semibold text-[#d4af37]">
-              35€ a persona
-            </span>{" "}
-            · Antipasto · Primo · Secondo · Acqua, vino e Prosecco inclusi
-            <span className="text-neutral-400">
-              {" "}
-              (bibite extra e superalcolici esclusi).
-            </span>
-          </p>
-          <p className="mt-2 text-xs text-neutral-400">
-            Incluso: tavolo riservato, atmosfera con dj set e vocalist,
-            ingresso privilegiato a Eclipse Noir con posto auto riservato.
-          </p>
-        </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Dati referente */}
+          <section className="space-y-3">
+            <h2 className="text-lg font-medium border-b border-gray-800 pb-1">
+              Dati referente
+            </h2>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm mb-1">Nome e cognome referente*</label>
+                <input
+                  type="text"
+                  className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  value={nomeReferente}
+                  onChange={(e) => setNomeReferente(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Telefono referente*</label>
+                <input
+                  type="tel"
+                  className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  value={telefonoReferente}
+                  onChange={(e) => setTelefonoReferente(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+          </section>
 
-        {/* MESSAGGIO STATO */}
-        {status !== "idle" && message && (
-          <div
-            className={`mb-4 rounded-lg border px-3 py-2 text-sm ${statusColor}`}
-          >
-            {message}
-          </div>
-        )}
+          {/* Ospiti e accompagnatori */}
+          <section className="space-y-3">
+            <h2 className="text-lg font-medium border-b border-gray-800 pb-1">
+              Ospiti e accompagnatori
+            </h2>
+            <div className="grid md:grid-cols-2 gap-4 items-end">
+              <div>
+                <label className="block text-sm mb-1">
+                  Numero totale ospiti (incluso il referente)*
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={90}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  value={numeroOspiti}
+                  onChange={(e) => setNumeroOspiti(Number(e.target.value) || 1)}
+                  required
+                />
+              </div>
+              <div className="text-sm text-gray-300">
+                <p>
+                  Accompagnatori da inserire:{" "}
+                  <span className="font-semibold">
+                    {Math.max(0, numeroOspiti - 1)}
+                  </span>
+                </p>
+                <p className="mt-1">
+                  Posti auto assegnati (1 ogni 5 persone, minimo 1):{" "}
+                  <span className="font-semibold">{postiAuto}</span>
+                </p>
+              </div>
+            </div>
 
-        {/* FORM PRENOTAZIONE */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Nome */}
-          <div>
-            <label className="block text-xs font-medium tracking-wide text-neutral-300 mb-1">
-              Nome e cognome referente*
-            </label>
-            <input
-              value={guestName}
-              onChange={(e) => setGuestName(e.target.value)}
-              className="w-full rounded-lg border border-[#d4af37]/40 bg-black/70 px-3 py-2 text-sm outline-none focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]"
-              placeholder="Es. Mario Rossi"
-            />
-          </div>
-
-          {/* Telefono */}
-          <div>
-            <label className="block text-xs font-medium tracking-wide text-neutral-300 mb-1">
-              Numero di telefono (WhatsApp)*
-            </label>
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded-lg border border-[#d4af37]/40 bg-black/70 px-3 py-2 text-sm outline-none focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]"
-              placeholder="Es. 3801234567"
-            />
-          </div>
-
-          {/* Numero ospiti */}
-          <div>
-            <label className="block text-xs font-medium tracking-wide text-neutral-300 mb-1">
-              Numero totale di ospiti a cena*
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={12}
-              value={guests}
-              onChange={(e) => setGuests(Number(e.target.value) || 1)}
-              className="w-full rounded-lg border border-[#d4af37]/40 bg-black/70 px-3 py-2 text-sm outline-none focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]"
-            />
-            <p className="mt-1 text-[11px] text-neutral-400">
-              Indica il numero totale di persone, te compreso.
-            </p>
-          </div>
-
-          {/* Orario arrivo */}
-          <div>
-            <label className="block text-xs font-medium tracking-wide text-neutral-300 mb-1">
-              Orario di arrivo indicativo
-            </label>
-            <input
-              type="time"
-              value={arrivalTime}
-              onChange={(e) => setArrivalTime(e.target.value)}
-              className="w-full rounded-lg border border-[#d4af37]/40 bg-black/70 px-3 py-2 text-sm outline-none focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]"
-            />
-          </div>
+            {companions.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-300">
+                  Inserisci nome, cognome e telefono di ogni accompagnatore
+                  (obbligatori).
+                </p>
+                {companions.map((c, index) => (
+                  <div
+                    key={index}
+                    className="grid md:grid-cols-3 gap-3 border border-gray-800 rounded-xl p-3 bg-gray-900/60"
+                  >
+                    <div>
+                      <label className="block text-xs mb-1">
+                        Nome accompagnatore {index + 1}*
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-950 px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        value={c.nome}
+                        onChange={(e) =>
+                          handleCompanionChange(index, "nome", e.target.value)
+                        }
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs mb-1">Cognome*</label>
+                      <input
+                        type="text"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-950 px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        value={c.cognome}
+                        onChange={(e) =>
+                          handleCompanionChange(index, "cognome", e.target.value)
+                        }
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs mb-1">Telefono*</label>
+                      <input
+                        type="tel"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-950 px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        value={c.telefono}
+                        onChange={(e) =>
+                          handleCompanionChange(index, "telefono", e.target.value)
+                        }
+                        required
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
 
           {/* Note */}
-          <div>
-            <label className="block text-xs font-medium tracking-wide text-neutral-300 mb-1">
-              Note particolari (intolleranze, richieste...)
-            </label>
+          <section className="space-y-3">
+            <h2 className="text-lg font-medium border-b border-gray-800 pb-1">
+              Note (opzionali)
+            </h2>
             <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full rounded-lg border border-[#d4af37]/40 bg-black/70 px-3 py-2 text-sm outline-none focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37]"
-              rows={3}
-              placeholder="Es. intolleranze, compleanno, richiesta tavolo..."
+              className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-purple-500"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Allergie, intolleranze, richieste particolari..."
             />
-          </div>
+          </section>
 
-          {/* Privacy */}
-          <div className="mt-2">
-            <label className="flex items-start gap-2 text-xs text-neutral-300">
-              <input
-                type="checkbox"
-                checked={privacy}
-                onChange={() => setPrivacy(!privacy)}
-                className="mt-[2px]"
-              />
-              <span>
-                Dichiaro di aver letto e accettato l’informativa sul
-                trattamento dei dati personali e autorizzo Villa Tre Colli
-                e Eclipse Noir a contattarmi per comunicazioni relative
-                alla cena spettacolo e all&apos;evento serale.
-              </span>
-            </label>
-          </div>
+          {/* Riepilogo e azioni */}
+          <section className="space-y-4 border-t border-gray-800 pt-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-sm">
+              <div>
+                <p>
+                  Totale ospiti:{" "}
+                  <span className="font-semibold">{numeroOspiti}</span>
+                </p>
+                <p>
+                  Prezzo per persona:{" "}
+                  <span className="font-semibold">
+                    € {DINNER_PRICE.toFixed(2).replace(".", ",")}
+                  </span>
+                </p>
+                <p>
+                  Totale ordine:{" "}
+                  <span className="font-semibold text-green-400">
+                    € {totalAmount.toFixed(2).replace(".", ",")}
+                  </span>
+                </p>
+                <p>
+                  Posti auto assegnati:{" "}
+                  <span className="font-semibold">{postiAuto}</span>
+                </p>
+              </div>
+              <div className="space-y-2">
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full md:w-auto inline-flex items-center justify-center rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-60 px-5 py-2.5 text-sm font-medium transition"
+                >
+                  {isSubmitting
+                    ? "Reindirizzamento al pagamento..."
+                    : "Procedi al pagamento con Stripe"}
+                </button>
+                {paypalUrl && (
+                  <div className="text-xs text-gray-400">
+                    Preferisci PayPal?{" "}
+                    <a
+                      href={paypalUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-blue-400 hover:underline"
+                    >
+                      Clicca qui per pagare con PayPal
+                    </a>
+                    {" "}
+                    (gestione manuale, posti confermati dopo verifica).
+                  </div>
+                )}
+              </div>
+            </div>
 
-          {/* Submit */}
-          <button
-            type="submit"
-            disabled={status === "loading"}
-            className="
-              mt-4 w-full rounded-full bg-gradient-to-r
-              from-[#d4af37] to-[#f3cd63]
-              text-black font-semibold py-3 text-sm tracking-wide
-              hover:from-[#f3cd63] hover:to-[#ffe58a]
-              disabled:opacity-60 disabled:cursor-not-allowed
-            "
-          >
-            {status === "loading"
-              ? "Invio prenotazione..."
-              : "INVIA RICHIESTA CENA SPETTACOLO"}
-          </button>
-
-          <p className="mt-3 text-[11px] text-neutral-500 text-center">
-            La prenotazione sarà confermata dalla direzione di Villa Tre
-            Colli in base alla disponibilità dei posti.
-          </p>
+            {error && (
+              <div className="text-sm text-red-400 border border-red-500/40 bg-red-950/40 rounded-lg px-3 py-2">
+                {error}
+              </div>
+            )}
+            {successMessage && (
+              <div className="text-sm text-green-400 border border-green-500/40 bg-green-950/40 rounded-lg px-3 py-2">
+                {successMessage}
+              </div>
+            )}
+          </section>
         </form>
-      </EclipsePanel>
-    </section>
+      </div>
+    </div>
   );
 }
