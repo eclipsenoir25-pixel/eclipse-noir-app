@@ -50,39 +50,41 @@ export default function ParcheggioPage() {
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-black text-white">
-      {/* Sfondo con immagine + maschera */}
+      {/* SFONDO */}
       <div
         className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-40"
         style={{
-          backgroundImage: "url('/villa-tre-colli-bg.jpg')",
+          backgroundImage: "url('/villa-tre-colli-bg.jpg')", // Usa la tua immagine se presente
         }}
       />
       <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/85 to-black/95" />
 
-      {/* Contenuto */}
+      {/* CONTENUTO */}
       <main className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 py-10">
-        {/* Logo + titolo */}
+        
+        {/* LOGO + TITOLO */}
         <div className="w-full max-w-xl mb-8 flex flex-col items-center">
-          {/* Logo: cambia src con il tuo file reale (es. /logo-eclipse.svg) */}
           <img
-            src="/logo-eclipse.png"
+            src="/logo/logo-eclipse.png"
             alt="Eclipse Noir"
             className="h-14 mb-4 object-contain"
           />
+
           <p className="text-sm uppercase tracking-[0.25em] text-neutral-300 mb-2 text-center">
             Villa Tre Colli · Evento Eclipse Noir
           </p>
+
           <h1 className="text-3xl md:text-4xl font-semibold text-center">
             Prenota il tuo posto auto
           </h1>
+
           <p className="mt-3 text-center text-sm md:text-base text-neutral-300 max-w-lg">
             Parcheggio interno riservato, coperto da sicurezza.  
-            <span className="font-semibold"> 8€ a posto</span>, quota dedicata alle prenotazioni via app
-            (max 30 posti totali).
+            <span className="font-semibold">8€ a posto</span>, quota dedicata alle prenotazioni via app (max 30 posti).
           </p>
         </div>
 
-        {/* Card form */}
+        {/* CARD FORM */}
         <form
           onSubmit={handleSubmit}
           className="w-full max-w-xl bg-neutral-950/80 border border-white/10 rounded-2xl p-6 md:p-8 shadow-2xl backdrop-blur-md space-y-5"
@@ -143,9 +145,7 @@ export default function ParcheggioPage() {
           </div>
 
           {errorMsg && (
-            <p className="text-sm text-red-400">
-              {errorMsg}
-            </p>
+            <p className="text-sm text-red-400">{errorMsg}</p>
           )}
 
           <button
@@ -157,8 +157,7 @@ export default function ParcheggioPage() {
           </button>
 
           <p className="text-[11px] text-neutral-400 mt-2 text-center">
-            Completando il pagamento ricevi conferma immediata del posto auto.
-            Mostra il codice prenotazione all&apos;ingresso.
+            Mostra il codice di prenotazione all’ingresso del parcheggio.
           </p>
         </form>
       </main>
