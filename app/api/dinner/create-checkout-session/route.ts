@@ -132,6 +132,9 @@ export async function POST(req: NextRequest) {
     const bookingObjectId = new ObjectId();
     const bookingId = bookingObjectId.toHexString();
 
+    // Usiamo il bookingId come codice biglietto
+    const codiceBiglietto = bookingId;
+
     const now = new Date();
 
     // SALVIAMO LA PRENOTAZIONE IN STATO "PENDING"
@@ -155,6 +158,7 @@ export async function POST(req: NextRequest) {
       stripePaymentIntentId: null,
       createdAt: now,
       updatedAt: now,
+      codiceBiglietto, // opzionale ma utile anche in DB
     });
 
     const amountTotal = Math.round(DINNER_PRICE_EUR * numeroOspiti * 100);
@@ -175,7 +179,12 @@ export async function POST(req: NextRequest) {
           },
         },
       ],
-      success_url: `${BASE_URL}/cena-spettacolo/success?session_id={CHECKOUT_SESSION_ID}`,
+      // ⬇⬇⬇ SUCCESS URL CON TUTTI I PARAMETRI
+      success_url: `${BASE_URL}/cena-spettacolo/success?nome=${encodeURIComponent(
+        nomeReferente
+      )}&ospiti=${numeroOspiti}&postiAuto=${postiAuto}&codice=${encodeURIComponent(
+        codiceBiglietto
+      )}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${BASE_URL}/cena-spettacolo/cancel`,
       metadata: {
         bookingId,
@@ -184,6 +193,7 @@ export async function POST(req: NextRequest) {
         telefonoReferente,
         numeroOspiti: String(numeroOspiti),
         postiAuto: String(postiAuto),
+        codiceBiglietto,
       },
     });
 
