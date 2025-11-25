@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import SuccessClient from "./successClient";
+import SuccessClient from "./SuccessClient";
 
 export default function SuccessPage() {
   return (
