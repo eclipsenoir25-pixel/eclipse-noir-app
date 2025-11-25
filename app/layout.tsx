@@ -51,9 +51,9 @@ export default function RootLayout({
             z-10
             bg-[radial-gradient(circle,rgba(0,0,0,0)_0%,rgba(0,0,0,0.85)_75%)]
           "
-        ></div>
+        />
 
-        {/* HEADER */}
+        {/* HEADER (logo + navbar) */}
         <Header />
 
         {/* CONTENUTO PAGINE */}
