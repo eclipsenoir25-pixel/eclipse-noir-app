@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import EclipsePanel from "../components/ui/EclipsePanel";
-import EclipseButton from "../components/ui/EclipseButton";
+import EclipsePanel from "../../components/ui/EclipsePanel";
+import EclipseButton from "../../components/ui/EclipseButton";
 
 type Companion = {
   nome: string;

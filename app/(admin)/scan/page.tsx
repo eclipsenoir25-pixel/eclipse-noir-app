@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Scanner } from "@yudiel/react-qr-scanner";
-import ScanResultModal from "../components/ui/ScanResultModal";
+import ScanResultModal from "../../components/ui/ScanResultModal";
 
 type ScanStatus = "idle" | "loading" | "ok" | "already_used" | "invalid" | "error";
 type ModalStatus = "success" | "error" | "warning";

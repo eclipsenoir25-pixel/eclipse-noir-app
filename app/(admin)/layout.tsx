@@ -27,10 +27,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         "
       />
 
-      {/* HEADER ADMIN (logo + nav LISTA / SCAN / EVENTI / RICHIESTE) */}
+      {/* HEADER ADMIN */}
       <Header />
 
-      {/* CONTENUTO DELLE PAGINE ADMIN */}
+      {/* CONTENUTO ADMIN */}
       <main className="z-20 flex-grow px-4 py-8 max-w-4xl w-full mx-auto">
         {children}
       </main>
